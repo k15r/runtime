@@ -268,7 +268,7 @@
   revision = "efba541fddcb6ed78fb9aae0d5f100bfb0743087"
 
 [[projects]]
-  digest = "1:e38da7d798dbfdece007f47e99e46f0f096076e350ae4a5f1095a440c4b53465"
+  digest = "1:303ccecc6d9fb7e3bed69ba2fdfd3b7dc7029dac1157b86706cbacf17ff8ce39"
   name = "github.com/knative/serving"
   packages = [
     "pkg/apis/autoscaling",
@@ -279,8 +279,8 @@
     "pkg/apis/serving/v1alpha1",
   ]
   pruneopts = "T"
-  revision = "de51b2cd890649e2081dcafbc50afa8b07b54704"
-  version = "v0.5.1"
+  revision = "98e0f5a999ba0f69c1909a676078a22e9b8b13b9"
+  version = "v0.5.2"
 
 [[projects]]
   digest = "1:3804a3a02964db8e6db3e5e7960ac1c1a9b12835642dd4f4ac4e56c749ec73eb"
@@ -1079,7 +1079,6 @@
   input-imports = [
     "github.com/emicklei/go-restful",
     "github.com/ghodss/yaml",
-    "github.com/google/uuid",
     "github.com/knative/build/pkg/apis/build/v1alpha1",
     "github.com/knative/serving/pkg/apis/serving/v1alpha1",
     "github.com/onsi/ginkgo",

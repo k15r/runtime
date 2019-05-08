@@ -17,7 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -45,8 +45,19 @@ type FunctionSpec struct {
 	Env []v1.EnvVar `json:"env,omitempty"`
 }
 
+type FunctionStatusType string
+
+const (
+	FunctionUpdating  FunctionStatusType = "Updating"
+	FunctionDeploying FunctionStatusType = "Deploying"
+	FunctionRunning   FunctionStatusType = "Running"
+	FunctionError     FunctionStatusType = "Error"
+)
+
 // FunctionStatus defines the observed state of Function
 type FunctionStatus struct {
+	Status      FunctionStatusType `json:"status,omitempty"`
+	Description string             `json:"description,omitempty"`
 }
 
 // +genclient
@@ -54,6 +65,7 @@ type FunctionStatus struct {
 
 // Function is the Schema for the functions API
 // +k8s:openapi-gen=true
+// +kubebuilder:subresource:status
 type Function struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

@@ -10,10 +10,9 @@ spec:
   names:
     kind: Function
     plural: functions
-    singular: function
-    shortNames:
-    - fn
   scope: Namespaced
+  subresources:
+    status: {}
   validation:
     openAPIV3Schema:
       properties:
@@ -44,8 +43,8 @@ spec:
               description: function defines the content of a function
               type: string
             functionContentType:
-              description: functionContentType defines file content type (plaintext/
-                base64)
+              description: functionContentType defines file content type (plaintext
+                or base64)
               type: string
             runtime:
               description: runtime is the programming language used for a function
@@ -67,6 +66,11 @@ spec:
           - runtime
           type: object
         status:
+          properties:
+            description:
+              type: string
+            status:
+              type: string
           type: object
   version: v1alpha1
 status:

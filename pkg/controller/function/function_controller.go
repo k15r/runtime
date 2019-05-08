@@ -45,6 +45,13 @@ import (
 
 var log = logf.Log.WithName("controller")
 
+const (
+	ConfigName            string = "fn-config"
+	ConfigNamespace       string = "default"
+	ConfigMapNameEnv      string = "CONTROLLER_CONFIGMAP"
+	ConfigMapNamespaceEnv string = "CONTROLLER_CONFIGMAP_NS"
+)
+
 // Add creates a new Function Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
@@ -91,39 +98,45 @@ type ReconcileFunction struct {
 	scheme *runtime.Scheme
 }
 
-// Reconcile reads that state of the cluster for a Function object and makes changes based on the state read
-// and what is in the Function.Spec
-// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=apps,resources=deployments/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=runtime.kyma-project.io,resources=functions,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=runtime.kyma-project.io,resources=functions/status,verbs=get;update;patch
-func (r *ReconcileFunction) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-
-	fnConfigName := "fn-config"
-	fnConfigNamespace := "default"
-	fnConfigNameEnv := os.Getenv("CONTROLLER_CONFIGMAP")
-	fnConfigNamespaceEnv := os.Getenv("CONTROLLER_CONFIGMAP_NS")
-
-	if len(fnConfigNameEnv) > 0 {
-		fnConfigName = fnConfigNameEnv
+func getEnvDefault(name, defaultValue string) string {
+	value := os.Getenv(name)
+	if len(value) == 0 {
+		return defaultValue
 	}
+	return value
 
-	if len(fnConfigNamespaceEnv) > 0 {
-		fnConfigNamespace = fnConfigNamespaceEnv
-	}
+}
+
+func (r *ReconcileFunction) loadConfig() (*runtimeUtil.RuntimeInfo, error) {
+
+	fnConfigName := getEnvDefault(ConfigMapNameEnv, ConfigName)
+	fnConfigNamespace := getEnvDefault(ConfigMapNamespaceEnv, ConfigNamespace)
+
 	fnConfig := &corev1.ConfigMap{}
 	err := r.Get(context.TODO(), types.NamespacedName{Name: fnConfigName, Namespace: fnConfigNamespace}, fnConfig)
 
 	if err != nil {
 		log.Error(err, "Unable to read Function controller config: %v from Namespace: %v", fnConfigName, fnConfigNamespace)
+		return nil, err
+	}
+
+	return runtimeUtil.New(fnConfig)
+}
+
+// Reconcile reads that state of the cluster for a Function object and makes changes based on the state read
+// and what is in the Function.Spec
+// + kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+// + kubebuilder:rbac:groups=apps,resources=deployments/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=runtime.kyma-project.io,resources=functions,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=runtime.kyma-project.io,resources=functions/status,verbs=get;update;patch
+func (r *ReconcileFunction) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+
+	rnInfo, err := r.loadConfig()
+
+	if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	rnInfo, err := runtimeUtil.New(fnConfig)
-	if err != nil {
-		fmt.Printf("Error in reading ConfigMap: %v", err)
-		return reconcile.Result{}, err
-	}
 	// Fetch the Function instance
 	fn := &runtimev1alpha1.Function{}
 	err = r.Get(context.TODO(), request.NamespacedName, fn)
@@ -136,6 +149,7 @@ func (r *ReconcileFunction) Reconcile(request reconcile.Request) (reconcile.Resu
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
+
 	data := make(map[string]string)
 	data["handler"] = "handler.main"
 	data["handler.js"] = fn.Spec.Function
@@ -161,26 +175,34 @@ func (r *ReconcileFunction) Reconcile(request reconcile.Request) (reconcile.Resu
 	foundCm := &corev1.ConfigMap{}
 	err = r.Get(context.TODO(), types.NamespacedName{Name: deployCm.Name, Namespace: deployCm.Namespace}, foundCm)
 	if err != nil && errors.IsNotFound(err) {
+		fn.Status.Status = runtimev1alpha1.FunctionDeploying
+		fn.Status.Description = fn.Status.Description + "createCM;"
+		// r.Status().Update(context.Background(), fn)
+
 		log.Info("Creating ConfigMap", "namespace", deployCm.Namespace, "name", deployCm.Name)
+
 		err = r.Create(context.TODO(), deployCm)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
 	} else if err != nil {
 		return reconcile.Result{}, err
-	}
-
-	if !reflect.DeepEqual(deployCm.Data, foundCm.Data) {
+	} else if !reflect.DeepEqual(deployCm.Data, foundCm.Data) {
 		foundCm.Data = deployCm.Data
 		log.Info("Updating ConfigMap", "namespace", deployCm.Namespace, "name", deployCm.Name)
+		fn.Status.Description = fn.Status.Description + "updateCM;"
+		fn.Status.Status = runtimev1alpha1.FunctionUpdating
+		// r.Status().Update(context.Background(), fn)
 		err = r.Update(context.TODO(), foundCm)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
 	}
+
 	err = r.Get(context.TODO(), types.NamespacedName{Name: deployCm.Name, Namespace: deployCm.Namespace}, foundCm)
 	if err != nil {
 		log.Error(err, "namespace", deployCm.Namespace, "name", deployCm.Name)
+		return reconcile.Result{}, err
 	}
 	hash := sha256.New()
 	hash.Write([]byte(foundCm.Data["handler.js"] + foundCm.Data["package.json"]))
@@ -197,6 +219,12 @@ func (r *ReconcileFunction) Reconcile(request reconcile.Request) (reconcile.Resu
 		Spec: runtimeUtil.GetServiceSpec(imageName, *fn, rnInfo),
 	}
 
+	// if len(deployService.Spec.RunLatest.Configuration.Build.BuildSpec.Steps) == 0 {
+	// 	fn.Status.Status = runtimev1alpha1.FunctionError
+	// 	fn.Status.Description = "invalid runtime configured"
+	// 	r.Status().Update(context.Background(), fn)
+	// }
+
 	if err := controllerutil.SetControllerReference(fn, deployService, r.scheme); err != nil {
 		return reconcile.Result{}, err
 	}
@@ -205,24 +233,24 @@ func (r *ReconcileFunction) Reconcile(request reconcile.Request) (reconcile.Resu
 	err = r.Get(context.TODO(), types.NamespacedName{Name: deployService.Name, Namespace: deployService.Namespace}, foundService)
 	if err != nil && errors.IsNotFound(err) {
 		log.Info("Creating Service", "namespace", deployService.Namespace, "name", deployService.Name)
+
+		fn.Status.Status = runtimev1alpha1.FunctionDeploying
+		// r.Status().Update(context.Background(), fn)
+
 		err = r.Create(context.TODO(), deployService)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
+		return reconcile.Result{}, err
 	} else if err != nil {
 		fmt.Printf("Error while creating: %v", err)
 		return reconcile.Result{}, err
-	}
-
-	if !reflect.DeepEqual(deployService.Spec, foundService.Spec) {
+	} else if !reflect.DeepEqual(deployService.Spec, foundService.Spec) {
 		foundService.Spec = deployService.Spec
 		log.Info("Updating Service", "namespace", deployService.Namespace, "name", deployService.Name)
+		fn.Status.Status = runtimev1alpha1.FunctionUpdating
+		fn.Status.Description = fn.Status.Description + "updateSvc;"
 		err = r.Update(context.TODO(), foundService)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
+		// r.Status().Update(context.Background(), fn)
+		return reconcile.Result{}, err
 	}
-
 	return reconcile.Result{}, nil
 
 }

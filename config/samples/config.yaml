@@ -35,7 +35,7 @@ items:
     name: dockerfile-nodejs-8
 - apiVersion: v1
   data:
-    dockerRegistry: ### put your github name here e.g. k15r
+    dockerRegistry: k15r
     runtimes: |
       - ID: nodejs8
         dockerFileName: dockerfile-nodejs-8
@@ -59,11 +59,9 @@ type: kubernetes.io/basic-auth
 data:
   # your docker.io username goes here 
   # username NOT the email
-  # echo -n $USERNAME | base64 
-  username: 
+  username: azE1cg==
   # password for the account
-  # echo -n $PASSWORD | base64 
-  password: 
+  password: ZG9ja2VyaHViM3gzdHVjMHI=
 ---
 apiVersion: v1
 kind: ServiceAccount

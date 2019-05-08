@@ -48,7 +48,7 @@ const timeout = time.Second * 10
 
 func TestReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
-	fnCreated := &runtimev1alpha1.Function{
+	fnNew := &runtimev1alpha1.Function{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "foo",
 			Namespace: "default",
@@ -153,22 +153,22 @@ func TestReconcile(t *testing.T) {
 		return
 	}
 
-	err = c.Create(context.TODO(), fnCreated)
+	err = c.Create(context.TODO(), fnNew)
 	if apierrors.IsInvalid(err) {
 		t.Logf("failed to create object, got an invalid object error: %v", err)
 		return
 	}
 	g.Expect(err).NotTo(gomega.HaveOccurred())
 
+	fnCreated := &runtimev1alpha1.Function{}
+
 	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
+	g.Eventually(func() error { return c.Get(context.TODO(), depKey, fnCreated) }, timeout).
+		Should(gomega.Succeed())
+	g.Expect(fnCreated.Status.Status).To(gomega.Equal(runtimev1alpha1.FunctionDeploying))
 
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "default"},
-	}
-
-	service := &servingv1alpha1.Service{
-		ObjectMeta: metav1.ObjectMeta{Name: "foo", Namespace: "default"},
-	}
+	cm := &corev1.ConfigMap{}
+	service := &servingv1alpha1.Service{}
 
 	g.Eventually(func() error { return c.Get(context.TODO(), depKey, cm) }, timeout).
 		Should(gomega.Succeed())

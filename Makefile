@@ -5,11 +5,8 @@ IMG ?= runtime-controller:latest
 all: test manager
 
 # Run tests
-test: generate fmt vet
-	go test -v ./pkg/... ./cmd/... -coverprofile cover.out
-
-qt:
-	go test -v ./pkg/... ./cmd/... -coverprofile cover.out
+test: generate fmt vet manifests
+	go test ./pkg/... ./cmd/... -coverprofile cover.out -v
 
 # Build manager binary
 manager: generate fmt vet
@@ -20,25 +17,17 @@ run: generate fmt vet
 	go run ./cmd/manager/main.go
 
 # Install CRDs into a cluster
-install: 
-	kubectl apply -f config/crds/runtime_v1alpha1_function.yaml
-
-# CreateResource creates a resource in the cluster
-create-resource:
-	kubectl apply -f config/samples
-
-# DeleteResource creates a resource in the cluster
-delete-resource:
-	kubectl delete -f config/samples
+install: manifests
+	kubectl apply -f config/crds
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
-# deploy: manifests
-# 	kubectl apply -f config/crds
-# 	kustomize build config/default | kubectl apply -f -
+deploy: manifests
+	kubectl apply -f config/crds
+	kustomize build config/default | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
-# manifests:
-	# go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go all
+manifests:
+	go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go all
 
 # Run go fmt against code
 fmt:
@@ -49,7 +38,10 @@ vet:
 	go vet ./pkg/... ./cmd/...
 
 # Generate code
-generate: dep
+generate:
+ifndef GOPATH
+	$(error GOPATH not defined, please define GOPATH. Run "go help gopath" to learn more about GOPATH)
+endif
 	go generate ./pkg/... ./cmd/...
 
 dep:
