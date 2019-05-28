@@ -20,6 +20,7 @@ import (
 	"flag"
 	"os"
 
+	buildv1alpha1 "github.com/knative/build/pkg/apis/build/v1alpha1"
 	servingv1alpha1 "github.com/knative/serving/pkg/apis/serving/v1alpha1"
 	"github.com/kyma-incubator/runtime/pkg/apis"
 	"github.com/kyma-incubator/runtime/pkg/controller"
@@ -32,6 +33,8 @@ import (
 )
 
 func main() {
+	var metricsAddr string
+	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.Parse()
 	logf.SetLogger(logf.ZapLogger(false))
 	log := logf.Log.WithName("entrypoint")
@@ -46,6 +49,7 @@ func main() {
 
 	// Create a new Cmd to provide shared dependencies and start components
 	log.Info("setting up manager")
+	//mgr, err := manager.New(cfg, manager.Options{MetricsBindAddress: metricsAddr})
 	mgr, err := manager.New(cfg, manager.Options{})
 	if err != nil {
 		log.Error(err, "unable to set up overall controller manager")
@@ -63,6 +67,11 @@ func main() {
 
 	if err := servingv1alpha1.AddToScheme(mgr.GetScheme()); err != nil {
 		log.Error(err, "unable add Serving APIs to scheme")
+		os.Exit(1)
+	}
+
+	if err := buildv1alpha1.AddToScheme(mgr.GetScheme()); err != nil {
+		log.Error(err, "unable add Build APIs to scheme")
 		os.Exit(1)
 	}
 
